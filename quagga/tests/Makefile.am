@@ -11,7 +11,7 @@ TESTS_BGPD =
 endif
 
 noinst_PROGRAMS = testsig testbuffer testmemory heavy heavywq heavythread \
-		testprivs teststream testchecksum tabletest \
+		testprivs teststream testchecksum tabletest testskiplist\
 		$(TESTS_BGPD)
 
 testsig_SOURCES = test-sig.c
@@ -29,6 +29,7 @@ testbgpmpattr_SOURCES =  bgp_mp_attr_test.c
 testchecksum_SOURCES = test-checksum.c
 testbgpmpath_SOURCES = bgp_mpath_test.c
 tabletest_SOURCES = table_test.c
+testskiplist_SOURCES = test-skiplist.c
 
 testsig_LDADD = ../lib/libzebra.la @LIBCAP@
 testbuffer_LDADD = ../lib/libzebra.la @LIBCAP@
@@ -45,3 +46,4 @@ testbgpmpattr_LDADD = ../bgpd/libbgp.a ../lib/libzebra.la @LIBCAP@ -lm
 testchecksum_LDADD = ../lib/libzebra.la @LIBCAP@ 
 testbgpmpath_LDADD = ../bgpd/libbgp.a ../lib/libzebra.la @LIBCAP@ -lm
 tabletest_LDADD = ../lib/libzebra.la @LIBCAP@ -lm
+testskiplist_LDADD = ../lib/libzebra.la

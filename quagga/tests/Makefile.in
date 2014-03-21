@@ -54,7 +54,7 @@ target_triplet = @target@
 noinst_PROGRAMS = testsig$(EXEEXT) testbuffer$(EXEEXT) \
 	testmemory$(EXEEXT) heavy$(EXEEXT) heavywq$(EXEEXT) \
 	heavythread$(EXEEXT) testprivs$(EXEEXT) teststream$(EXEEXT) \
-	testchecksum$(EXEEXT) tabletest$(EXEEXT) $(am__EXEEXT_1)
+	testchecksum$(EXEEXT) tabletest$(EXEEXT) testskiplist$(EXEEXT) $(am__EXEEXT_1)
 subdir = tests
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
 	$(top_srcdir)/depcomp
@@ -91,6 +91,9 @@ heavywq_DEPENDENCIES = ../lib/libzebra.la
 am_tabletest_OBJECTS = table_test.$(OBJEXT)
 tabletest_OBJECTS = $(am_tabletest_OBJECTS)
 tabletest_DEPENDENCIES = ../lib/libzebra.la
+am_testskiplist_OBJECTS = test-skiplist.$(OBJEXT)
+testskiplist_OBJECTS = $(am_testskiplist_OBJECTS)
+testskiplist_DEPENDENCIES = ../lib/libzebra.la
 am_testbgpcap_OBJECTS = bgp_capability_test.$(OBJEXT)
 testbgpcap_OBJECTS = $(am_testbgpcap_OBJECTS)
 testbgpcap_DEPENDENCIES = ../bgpd/libbgp.a ../lib/libzebra.la
@@ -133,13 +136,14 @@ LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	$(LDFLAGS) -o $@
 SOURCES = $(aspathtest_SOURCES) $(ecommtest_SOURCES) $(heavy_SOURCES) \
 	$(heavythread_SOURCES) $(heavywq_SOURCES) $(tabletest_SOURCES) \
+	$(testskiplist_SOURCES) \
 	$(testbgpcap_SOURCES) $(testbgpmpath_SOURCES) \
 	$(testbgpmpattr_SOURCES) $(testbuffer_SOURCES) \
 	$(testchecksum_SOURCES) $(testmemory_SOURCES) \
 	$(testprivs_SOURCES) $(testsig_SOURCES) $(teststream_SOURCES)
 DIST_SOURCES = $(aspathtest_SOURCES) $(ecommtest_SOURCES) \
 	$(heavy_SOURCES) $(heavythread_SOURCES) $(heavywq_SOURCES) \
-	$(tabletest_SOURCES) $(testbgpcap_SOURCES) \
+	$(tabletest_SOURCES) $(testskiplist_SOURCES) $(testbgpcap_SOURCES) \
 	$(testbgpmpath_SOURCES) $(testbgpmpattr_SOURCES) \
 	$(testbuffer_SOURCES) $(testchecksum_SOURCES) \
 	$(testmemory_SOURCES) $(testprivs_SOURCES) $(testsig_SOURCES) \
@@ -341,6 +345,7 @@ testbgpmpattr_SOURCES = bgp_mp_attr_test.c
 testchecksum_SOURCES = test-checksum.c
 testbgpmpath_SOURCES = bgp_mpath_test.c
 tabletest_SOURCES = table_test.c
+testskiplist_SOURCES = test-skiplist.c
 testsig_LDADD = ../lib/libzebra.la @LIBCAP@
 testbuffer_LDADD = ../lib/libzebra.la @LIBCAP@
 testmemory_LDADD = ../lib/libzebra.la @LIBCAP@
@@ -356,6 +361,7 @@ testbgpmpattr_LDADD = ../bgpd/libbgp.a ../lib/libzebra.la @LIBCAP@ -lm
 testchecksum_LDADD = ../lib/libzebra.la @LIBCAP@ 
 testbgpmpath_LDADD = ../bgpd/libbgp.a ../lib/libzebra.la @LIBCAP@ -lm
 tabletest_LDADD = ../lib/libzebra.la @LIBCAP@ -lm
+testskiplist_LDADD = ../lib/libzebra.la
 all: all-am
 
 .SUFFIXES:
@@ -417,6 +423,9 @@ heavywq$(EXEEXT): $(heavywq_OBJECTS) $(heavywq_DEPENDENCIES) $(EXTRA_heavywq_DEP
 tabletest$(EXEEXT): $(tabletest_OBJECTS) $(tabletest_DEPENDENCIES) $(EXTRA_tabletest_DEPENDENCIES) 
 	@rm -f tabletest$(EXEEXT)
 	$(LINK) $(tabletest_OBJECTS) $(tabletest_LDADD) $(LIBS)
+testskiplist$(EXEEXT): $(testskiplist_OBJECTS) $(testskiplist_DEPENDENCIES) $(EXTRA_testskiplist_DEPENDENCIES) 
+	@rm -f testskiplist$(EXEEXT)
+	$(LINK) $(testskiplist_OBJECTS) $(testskiplist_LDADD) $(LIBS)
 testbgpcap$(EXEEXT): $(testbgpcap_OBJECTS) $(testbgpcap_DEPENDENCIES) $(EXTRA_testbgpcap_DEPENDENCIES) 
 	@rm -f testbgpcap$(EXEEXT)
 	$(LINK) $(testbgpcap_OBJECTS) $(testbgpcap_LDADD) $(LIBS)
@@ -461,6 +470,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/heavy.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/table_test.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-skiplist.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-buffer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-checksum.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-memory.Po@am__quote@
