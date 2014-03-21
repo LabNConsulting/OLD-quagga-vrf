@@ -1,4 +1,8 @@
 /*
+ * This file modified by LabN Consulting, L.L.C.
+ */
+
+/*
    Command interpreter routine for virtual terminal [aka TeletYpe]
    Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
 
@@ -2337,6 +2341,9 @@ DEFUN (config_exit,
       vty->node = CONFIG_NODE;
       break;
     case BGP_VPNV4_NODE:
+    case BGP_VPNV6_NODE:
+    case BGP_ENCAP_NODE:
+    case BGP_ENCAPV6_NODE:
     case BGP_IPV4_NODE:
     case BGP_IPV4M_NODE:
     case BGP_IPV6_NODE:

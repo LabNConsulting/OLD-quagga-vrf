@@ -1,3 +1,7 @@
+/*
+ * This file modified by LabN Consulting, L.L.C.
+ */
+
 /* BGP Extended Communities Attribute
    Copyright (C) 2000 Kunihiro Ishiguro <kunihiro@zebra.org>
 
@@ -642,14 +646,33 @@ ecommunity_ecom2str (struct ecommunity *ecom, int format)
 
       /* High-order octet of type. */
       encode = *pnt++;
-      if (encode != ECOMMUNITY_ENCODE_AS && encode != ECOMMUNITY_ENCODE_IP
-		      && encode != ECOMMUNITY_ENCODE_AS4)
-	{
+
+      switch (encode) {
+
+       case ECOMMUNITY_ENCODE_AS:
+       case ECOMMUNITY_ENCODE_IP:
+       case ECOMMUNITY_ENCODE_AS4:
+         break;
+
+       case ECOMMUNITY_ENCODE_OPAQUE:
+         if (*pnt == ECOMMUNITY_OPAQUE_SUBTYPE_ENCAP) {
+           uint16_t            tunneltype;
+
+           memcpy(&tunneltype, pnt+5, 2);
+           tunneltype = ntohs(tunneltype);
+           len = sprintf(str_buf + str_pnt, "ET:%d", tunneltype);
+           str_pnt += len;
+           first = 0;
+           continue;
+         }
+         /* fall through */
+
+       default:
 	  len = sprintf (str_buf + str_pnt, "?");
 	  str_pnt += len;
 	  first = 0;
 	  continue;
-	}
+      }
       
       /* Low-order octet of type. */
       type = *pnt++;
