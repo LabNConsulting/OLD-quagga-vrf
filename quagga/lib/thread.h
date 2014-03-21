@@ -1,3 +1,7 @@
+/*
+ * This file modified by LabN Consulting, L.L.C.
+ */
+
 /* Thread management routine header.
  * Copyright (C) 1998 Kunihiro Ishiguro
  * Portions Copyright (c) 2008 Everton da Silva Marques <everton.marques@gmail.com>
@@ -44,16 +48,25 @@ struct thread_list
   int count;
 };
 
+#define THREAD_TIMER_USE_SKIPLIST
+
 /* Master of the theads. */
 struct thread_master
 {
   struct thread_list read;
   struct thread_list write;
+#ifndef THREAD_TIMER_USE_SKIPLIST
   struct thread_list timer;
+#endif
   struct thread_list event;
   struct thread_list ready;
   struct thread_list unuse;
+#ifndef THREAD_TIMER_USE_SKIPLIST
   struct thread_list background;
+#else
+  void *skiplist_timer;		/* use instead of timer thread_list */
+  void *skiplist_background;
+#endif
   fd_set readfd;
   fd_set writefd;
   fd_set exceptfd;

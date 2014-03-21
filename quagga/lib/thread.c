@@ -1,3 +1,7 @@
+/*
+ * This file modified by LabN Consulting, L.L.C.
+ */
+
 /* Thread management routine
  * Copyright (C) 1998, 2000 Kunihiro Ishiguro <kunihiro@zebra.org>
  *
@@ -29,6 +33,7 @@
 #include "hash.h"
 #include "command.h"
 #include "sigevent.h"
+#include "skiplist.h"
 
 #if defined HAVE_SNMP && defined SNMP_AGENTX
 #include <net-snmp/net-snmp-config.h>
@@ -56,6 +61,9 @@ static unsigned short timers_inited;
 
 static struct hash *cpu_record = NULL;
 
+#define TIME_T_MAX ((sizeof(time_t) == 64)? INT64_MAX:	\
+    ((sizeof(time_t) == 32)? INT32_MAX: INT16_MAX) )
+
 /* Struct timeval's tv_usec one second value.  */
 #define TIMER_SECOND_MICRO 1000000L
 
@@ -94,7 +102,7 @@ timeval_subtract (struct timeval a, struct timeval b)
   return timeval_adjust (ret);
 }
 
-static long
+static inline long
 timeval_cmp (struct timeval a, struct timeval b)
 {
   return (a.tv_sec == b.tv_sec
@@ -107,6 +115,18 @@ timeval_elapsed (struct timeval a, struct timeval b)
   return (((a.tv_sec - b.tv_sec) * TIMER_SECOND_MICRO)
 	  + (a.tv_usec - b.tv_usec));
 }
+
+static int
+sl_timer_key_cmp(void *a, void *b)
+{
+    long cmp = timeval_cmp(*(struct timeval *)a, *(struct timeval *)b);
+    if (cmp < 0)
+	return -1;
+    if (cmp > 0)
+	return 1;
+    return 0;
+}
+
 
 #if !defined(HAVE_CLOCK_MONOTONIC) && !defined(__APPLE__)
 static void
@@ -514,13 +534,17 @@ thread_master_debug (struct thread_master *m)
   printf ("writelist : ");
   thread_list_debug (&m->write);
   printf ("timerlist : ");
+#ifndef THREAD_TIMER_USE_SKIPLIST
   thread_list_debug (&m->timer);
+#endif
   printf ("eventlist : ");
   thread_list_debug (&m->event);
   printf ("unuselist : ");
   thread_list_debug (&m->unuse);
   printf ("bgndlist : ");
+#ifndef THREAD_TIMER_USE_SKIPLIST
   thread_list_debug (&m->background);
+#endif
   printf ("total alloc: [%ld]\n", m->alloc);
   printf ("-----------\n");
 }
@@ -529,13 +553,23 @@ thread_master_debug (struct thread_master *m)
 struct thread_master *
 thread_master_create ()
 {
+  struct thread_master *master;
+
   if (cpu_record == NULL) 
     cpu_record 
       = hash_create_size (1011, (unsigned int (*) (void *))cpu_record_hash_key, 
                           (int (*) (const void *, const void *))cpu_record_hash_cmp);
     
-  return (struct thread_master *) XCALLOC (MTYPE_THREAD_MASTER,
+  master = (struct thread_master *) XCALLOC (MTYPE_THREAD_MASTER,
 					   sizeof (struct thread_master));
+#ifdef THREAD_TIMER_USE_SKIPLIST
+  master->skiplist_timer = skiplist_new(SKIPLIST_FLAG_ALLOW_DUPLICATES, 
+    sl_timer_key_cmp, NULL);
+  master->skiplist_background = skiplist_new(SKIPLIST_FLAG_ALLOW_DUPLICATES, 
+    sl_timer_key_cmp, NULL);
+#endif
+
+  return master;
 }
 
 /* Add a new thread to the list.  */
@@ -552,6 +586,7 @@ thread_list_add (struct thread_list *list, struct thread *thread)
   list->count++;
 }
 
+#ifndef THREAD_TIMER_USE_SKIPLIST
 /* Add a new thread just before the point.  */
 static void
 thread_list_add_before (struct thread_list *list, 
@@ -567,6 +602,7 @@ thread_list_add_before (struct thread_list *list,
   point->prev = thread;
   list->count++;
 }
+#endif
 
 /* Delete a thread from the list. */
 static struct thread *
@@ -613,18 +649,44 @@ thread_list_free (struct thread_master *m, struct thread_list *list)
     }
 }
 
+/* Free all unused thread. */
+static void
+thread_skiplist_free (struct thread_master *m, void **listp)
+{
+
+  if (listp == NULL || *listp == NULL) 
+    return;
+
+  while (!skiplist_empty(*listp)) 
+    {
+      struct thread *t = NULL;
+      skiplist_first(*listp, NULL, (void **)(char *)&t);
+      skiplist_delete_first(*listp);
+      if (t)
+        XFREE (MTYPE_THREAD, t);
+    }
+  skiplist_free(*listp);
+  *listp = NULL;
+}
+
 /* Stop thread scheduler. */
 void
 thread_master_free (struct thread_master *m)
 {
   thread_list_free (m, &m->read);
   thread_list_free (m, &m->write);
+#ifndef THREAD_TIMER_USE_SKIPLIST
   thread_list_free (m, &m->timer);
+#endif
   thread_list_free (m, &m->event);
   thread_list_free (m, &m->ready);
   thread_list_free (m, &m->unuse);
+#ifndef THREAD_TIMER_USE_SKIPLIST
   thread_list_free (m, &m->background);
-  
+#else
+  thread_skiplist_free (m, &m->skiplist_timer);
+  thread_skiplist_free (m, &m->skiplist_background);
+#endif
   XFREE (MTYPE_THREAD_MASTER, m);
 
   if (cpu_record)
@@ -766,35 +828,93 @@ funcname_thread_add_timer_timeval (struct thread_master *m,
                                   const char* funcname)
 {
   struct thread *thread;
+#ifndef THREAD_TIMER_USE_SKIPLIST
   struct thread_list *list;
+#endif
   struct timeval alarm_time;
+#ifndef THREAD_TIMER_USE_SKIPLIST
   struct thread *tt;
+  unsigned long delta_head;
+  unsigned long delta_tail;
+#endif
+
+#ifdef THREAD_TIMER_USE_SKIPLIST
+  struct skiplist *sl;
+#endif
 
   assert (m != NULL);
 
   assert (type == THREAD_TIMER || type == THREAD_BACKGROUND);
   assert (time_relative);
   
+#ifndef THREAD_TIMER_USE_SKIPLIST
   list = ((type == THREAD_TIMER) ? &m->timer : &m->background);
+#endif
   thread = thread_get (m, type, func, arg, funcname);
 
   /* Do we need jitter here? */
   quagga_get_relative (NULL);
   alarm_time.tv_sec = relative_time.tv_sec + time_relative->tv_sec;
+  if (alarm_time.tv_sec < 0)
+    alarm_time.tv_sec = TIME_T_MAX;
   alarm_time.tv_usec = relative_time.tv_usec + time_relative->tv_usec;
+
   thread->u.sands = timeval_adjust(alarm_time);
 
-  /* Sort by timeval. */
-  for (tt = list->head; tt; tt = tt->next)
-    if (timeval_cmp (thread->u.sands, tt->u.sands) <= 0)
-      break;
+#ifdef THREAD_TIMER_USE_SKIPLIST
+  /*
+   * Use skiplist for timer threads.
+   */
+  if (type == THREAD_TIMER) {
+    sl = (struct skiplist *)m->skiplist_timer;
+    skiplist_insert(sl, &(thread->u.sands), thread);
+    return thread;
+  } else {
+    sl = (struct skiplist *)m->skiplist_background;
+    skiplist_insert(sl, &(thread->u.sands), thread);
+    return thread;
+  }
 
-  if (tt)
-    thread_list_add_before (list, tt, thread);
-  else
+#else   /* ! THREAD_TIMER_USE_SKIPLIST */
+
+  /* optimize empty, tail &  head insert */
+  if (list->head == NULL ||
+      timeval_cmp (thread->u.sands, list->tail->u.sands) > 0) {
     thread_list_add (list, thread);
+    return thread;
+  }
+  if (timeval_cmp (thread->u.sands, list->head->u.sands) <= 0) {
+    thread_list_add_before (list, list->head, thread);
+    return thread;
+  }
+
+  /* now either search from head or tail based on which is "closer" */
+  delta_head = timeval_elapsed(thread->u.sands, list->head->u.sands);
+  delta_tail = timeval_elapsed(list->tail->u.sands, thread->u.sands);
+  if (delta_head < delta_tail ) {
+      /* Sort by timeval. From Head */
+      for (tt = list->head; tt; tt = tt->next)
+          if (timeval_cmp (thread->u.sands, tt->u.sands) <= 0) {
+    thread_list_add_before (list, tt, thread);
+              return thread;
+          }
+      /* optimized case 1, should never happen */
+    thread_list_add (list, thread);
+  } else {
+      /* Sort by timeval. From Tail */
+      /* list->tail>prev should never be null, as this would be case 2 */
+      for (tt = list->tail->prev; tt; tt = tt->prev)
+          if (timeval_cmp (thread->u.sands, tt->u.sands) > 0) {
+              /* insert after tt */
+              thread_list_add_before (list, tt->next, thread);
+              return thread;
+          } 
+      /* optimized case 2, should never happen */
+      thread_list_add_before (list, list->head, thread);
+  }
 
   return thread;
+#endif  /* ! THREAD_TIMER_USE_SKIPLIST */
 }
 
 
@@ -878,7 +998,10 @@ funcname_thread_add_event (struct thread_master *m,
 void
 thread_cancel (struct thread *thread)
 {
-  struct thread_list *list;
+  struct thread_list *list = NULL;
+#ifdef THREAD_TIMER_USE_SKIPLIST
+  void  *skiplist          = NULL;
+#endif
   
   switch (thread->type)
     {
@@ -893,7 +1016,11 @@ thread_cancel (struct thread *thread)
       list = &thread->master->write;
       break;
     case THREAD_TIMER:
+#ifdef THREAD_TIMER_USE_SKIPLIST
+      skiplist = thread->master->skiplist_timer;
+#else
       list = &thread->master->timer;
+#endif
       break;
     case THREAD_EVENT:
       list = &thread->master->event;
@@ -902,13 +1029,23 @@ thread_cancel (struct thread *thread)
       list = &thread->master->ready;
       break;
     case THREAD_BACKGROUND:
+#ifdef THREAD_TIMER_USE_SKIPLIST
+      skiplist = thread->master->skiplist_background;
+#else
       list = &thread->master->background;
+#endif
       break;
     default:
       return;
       break;
     }
+  if (list)
   thread_list_delete (list, thread);
+#ifdef THREAD_TIMER_USE_SKIPLIST
+  else
+    if (skiplist)
+      skiplist_delete(skiplist, &(thread->u.sands), thread);
+#endif
   thread->type = THREAD_UNUSED;
   thread_add_unuse (thread->master, thread);
 }
@@ -957,6 +1094,7 @@ thread_cancel_event (struct thread_master *m, void *arg)
   return ret;
 }
 
+#ifndef THREAD_TIMER_USE_SKIPLIST
 static struct timeval *
 thread_timer_wait (struct thread_list *tlist, struct timeval *timer_val)
 {
@@ -967,6 +1105,21 @@ thread_timer_wait (struct thread_list *tlist, struct timeval *timer_val)
     }
   return NULL;
 }
+
+#else  /* THREAD_TIMER_USE_SKIPLIST */
+
+static struct timeval *
+thread_timer_wait_sl (struct skiplist *sl, struct timeval *timer_val)
+{
+  struct timeval *tvfirst;
+  struct thread *threadfirst;
+
+  if (skiplist_first(sl, (void **)(char *)&tvfirst, (void **)(char *)&threadfirst)) 
+    return NULL;
+  *timer_val = timeval_subtract (threadfirst->u.sands, relative_time);
+  return timer_val;
+}
+#endif  /* THREAD_TIMER_USE_SKIPLIST */
 
 static struct thread *
 thread_run (struct thread_master *m, struct thread *thread,
@@ -1004,6 +1157,29 @@ thread_process_fd (struct thread_list *list, fd_set *fdset, fd_set *mfdset)
   return ready;
 }
 
+#ifdef THREAD_TIMER_USE_SKIPLIST
+/* Add all timers that have popped to the ready list. */
+static unsigned int
+thread_timer_process_sl (struct skiplist *sl, struct timeval *timenow)
+{
+  struct thread *thread;
+  unsigned int ready = 0;
+  struct timeval *thr_tv;
+
+  while (!skiplist_first(sl, (void **)(char *)&thr_tv, (void **)(char *)&thread)) {
+      if (timeval_cmp (*timenow, thread->u.sands) < 0)
+	return ready;
+      skiplist_delete_first(sl);
+      thread->type = THREAD_READY;
+      thread_list_add (&thread->master->ready, thread);
+      ready++;
+  }
+
+  return ready;
+}
+
+#else  /* THREAD_TIMER_USE_SKIPLIST */
+
 /* Add all timers that have popped to the ready list. */
 static unsigned int
 thread_timer_process (struct thread_list *list, struct timeval *timenow)
@@ -1024,6 +1200,7 @@ thread_timer_process (struct thread_list *list, struct timeval *timenow)
     }
   return ready;
 }
+#endif  /* THREAD_TIMER_USE_SKIPLIST */
 
 /* process a list en masse, e.g. for event thread lists */
 static unsigned int
@@ -1093,12 +1270,23 @@ thread_fetch (struct thread_master *m, struct thread *fetch)
       if (m->ready.count == 0)
         {
           quagga_get_relative (NULL);
+#ifdef THREAD_TIMER_USE_SKIPLIST
+	  timer_wait = thread_timer_wait_sl (m->skiplist_timer, &timer_val);
+	  timer_wait_bg = thread_timer_wait_sl (m->skiplist_background, &timer_val_bg);
+#else
           timer_wait = thread_timer_wait (&m->timer, &timer_val);
           timer_wait_bg = thread_timer_wait (&m->background, &timer_val_bg);
+#endif
           
           if (timer_wait_bg &&
               (!timer_wait || (timeval_cmp (*timer_wait, *timer_wait_bg) > 0)))
             timer_wait = timer_wait_bg;
+/*
+ * > 31 days not guaranteed to work (IEEE Std 1003.1, 2004 Edition)
+ */
+#define SELECT_MAX_TIMEOUT (30 * 24 * 60 * 60)
+	    if (timer_wait && (timer_wait->tv_sec > SELECT_MAX_TIMEOUT))
+	      timer_wait->tv_sec = SELECT_MAX_TIMEOUT;
         }
       
 #if defined HAVE_SNMP && defined SNMP_AGENTX
@@ -1150,7 +1338,11 @@ thread_fetch (struct thread_master *m, struct thread *fetch)
          priority than I/O threads, so let's push them onto the ready
 	 list in front of the I/O threads. */
       quagga_get_relative (NULL);
+#ifdef THREAD_TIMER_USE_SKIPLIST
+      thread_timer_process_sl (m->skiplist_timer, &relative_time);
+#else
       thread_timer_process (&m->timer, &relative_time);
+#endif
       
       /* Got IO, process it */
       if (num > 0)
@@ -1171,7 +1363,11 @@ thread_fetch (struct thread_master *m, struct thread *fetch)
 #endif
 
       /* Background timer/events, lowest priority */
+#ifdef THREAD_TIMER_USE_SKIPLIST
+      thread_timer_process_sl (m->skiplist_background, &relative_time);
+#else
       thread_timer_process (&m->background, &relative_time);
+#endif
       
       if ((thread = thread_trim_head (&m->ready)) != NULL)
         return thread_run (m, thread, fetch);
