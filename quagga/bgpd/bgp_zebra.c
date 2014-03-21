@@ -1,3 +1,7 @@
+/*
+ * This file modified by LabN Consulting, L.L.C.
+ */
+
 /* zebra client
    Copyright (C) 1997, 98, 99 Kunihiro Ishiguro
 
@@ -1086,4 +1090,14 @@ bgp_zebra_init (void)
   if_init ();
 
   bgp_nexthop_buf = stream_new(BGP_NEXTHOP_BUF_SIZE);
+}
+
+void
+bgp_zebra_destroy(void)
+{
+  if (zclient == NULL)
+      return;
+  zclient_stop(zclient);
+  zclient_free(zclient);
+  zclient = NULL;
 }

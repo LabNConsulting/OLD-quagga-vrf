@@ -3,6 +3,10 @@
 /*	$Id: md5.c,v 1.6 2006/01/17 23:39:04 vincent Exp $ */
 
 /*
+ * This file modified by LabN Consulting, L.L.C.
+ */
+
+/*
  * Copyright (C) 2004 6WIND
  *                          <Vincent.Jardin@6WIND.com>
  * All rights reserved.
@@ -360,7 +364,7 @@ caddr_t         digest;		/* caller digest to be filled in */
 					 * pass */
     MD5Update(&context, k_ipad, 64);	/* start with inner pad */
     MD5Update(&context, text, text_len); /* then text of datagram */
-    MD5Final(digest, &context);	/* finish up 1st pass */
+    MD5Final((uint8_t *)digest, &context);	/* finish up 1st pass */
     /*
      * perform outer MD5
      */
@@ -369,5 +373,5 @@ caddr_t         digest;		/* caller digest to be filled in */
     MD5Update(&context, k_opad, 64);	/* start with outer pad */
     MD5Update(&context, digest, 16);	/* then results of 1st
 					 * hash */
-    MD5Final(digest, &context);	/* finish up 2nd pass */
+    MD5Final((uint8_t *)digest, &context);	/* finish up 2nd pass */
 }

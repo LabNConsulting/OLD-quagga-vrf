@@ -1,3 +1,7 @@
+/*
+ * This file modified by LabN Consulting, L.L.C.
+ */
+
 /* BGP message definition header.
    Copyright (C) 1996, 97, 98, 99, 2000 Kunihiro Ishiguro
 
@@ -120,6 +124,7 @@ struct bgp
 #define BGP_FLAG_LOG_NEIGHBOR_CHANGES     (1 << 11)
 #define BGP_FLAG_GRACEFUL_RESTART         (1 << 12)
 #define BGP_FLAG_ASPATH_CONFED            (1 << 13)
+#define BGP_FLAG_DELETING                 (1 << 14)
 
   /* BGP Per AF flags */
   u_int16_t af_flags[AFI_MAX][SAFI_MAX];
@@ -749,6 +754,7 @@ struct bgp_nlri
 
 /* RFC4364 */
 #define SAFI_MPLS_LABELED_VPN                  128
+#define BGP_SAFI_VPN                           128
 
 /* Max TTL value.  */
 #define TTL_MAX                                255

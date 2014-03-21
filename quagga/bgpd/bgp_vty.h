@@ -1,3 +1,7 @@
+/*
+ * This file modified by LabN Consulting, L.L.C.
+ */
+
 /* BGP VTY interface.
    Copyright (C) 1996, 97, 98, 99, 2000 Kunihiro Ishiguro
 
@@ -25,5 +29,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 extern void bgp_vty_init (void);
 extern const char *afi_safi_print (afi_t, safi_t);
+
+extern int bgp_parse_afi(const char *str, afi_t *afi);
+extern int bgp_parse_safi(const char *str, safi_t *safi);
 
 #endif /* _QUAGGA_BGP_VTY_H */

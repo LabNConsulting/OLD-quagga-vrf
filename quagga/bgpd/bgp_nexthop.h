@@ -1,3 +1,7 @@
+/*
+ * This file modified by LabN Consulting, L.L.C.
+ */
+
 /* BGP nexthop scan
    Copyright (C) 2000 Kunihiro Ishiguro
 
@@ -57,5 +61,7 @@ extern int bgp_config_write_scan_time (struct vty *);
 extern int bgp_nexthop_onlink (afi_t, struct attr *);
 extern int bgp_nexthop_self (struct attr *);
 extern void bgp_address_init (void);
+extern void bgp_address_finish (void);
+extern void bgp_scan_destroy (void);
 
 #endif /* _QUAGGA_BGP_NEXTHOP_H */
