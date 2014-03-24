@@ -1,3 +1,16 @@
+AUTOMAKE_OPTIONS    = dejagnu
+DEJATOOL = libzebra
+
+SUBDIRS = \
+	bgpd.tests \
+	libzebra.tests
+
+EXTRA_DIST = \
+	config/unix.exp \
+	lib/bgpd.exp \
+	lib/libzebra.exp \
+	global-conf.exp
+
 INCLUDES = @INCLUDES@ -I.. -I$(top_srcdir) -I$(top_srcdir)/lib -I$(top_builddir)/lib
 DEFS = @DEFS@ $(LOCAL_OPTS) -DSYSCONFDIR=\"$(sysconfdir)/\"
 
@@ -6,13 +19,16 @@ AM_LDFLAGS = $(PILDFLAGS)
 
 if BGPD
 TESTS_BGPD = aspathtest testbgpcap ecommtest testbgpmpattr testbgpmpath
+DEJATOOL += bgpd
 else
 TESTS_BGPD =
 endif
 
-noinst_PROGRAMS = testsig testbuffer testmemory heavy heavywq heavythread \
-		testprivs teststream testchecksum tabletest testskiplist\
-		$(TESTS_BGPD)
+check_PROGRAMS = testsig testbuffer testmemory heavy heavywq heavythread \
+		testprivs teststream testchecksum tabletest testnexthopiter \
+		testskiplist $(TESTS_BGPD)
+
+noinst_HEADERS = prng.h
 
 testsig_SOURCES = test-sig.c
 testbuffer_SOURCES = test-buffer.c
@@ -30,6 +46,7 @@ testchecksum_SOURCES = test-checksum.c
 testbgpmpath_SOURCES = bgp_mpath_test.c
 tabletest_SOURCES = table_test.c
 testskiplist_SOURCES = test-skiplist.c
+testnexthopiter_SOURCES = test-nexthop-iter.c prng.c
 
 testsig_LDADD = ../lib/libzebra.la @LIBCAP@
 testbuffer_LDADD = ../lib/libzebra.la @LIBCAP@
@@ -47,3 +64,4 @@ testchecksum_LDADD = ../lib/libzebra.la @LIBCAP@
 testbgpmpath_LDADD = ../bgpd/libbgp.a ../lib/libzebra.la @LIBCAP@ -lm
 tabletest_LDADD = ../lib/libzebra.la @LIBCAP@ -lm
 testskiplist_LDADD = ../lib/libzebra.la
+testnexthopiter_LDADD = ../lib/libzebra.la @LIBCAP@
